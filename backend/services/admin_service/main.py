@@ -1,8 +1,13 @@
+import sys
+import os
+
+sys.path.insert(0, '/app')
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from backend.config.settings import settings
-from backend.services.admin_service.handlers import router as admin_router
+from config.settings import settings
+from services.admin_service.handlers import router as admin_router
 import logging
 
 logging.basicConfig(level=logging.INFO)

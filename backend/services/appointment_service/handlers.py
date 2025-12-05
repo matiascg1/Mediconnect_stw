@@ -120,6 +120,20 @@ def handle_reschedule_appointment(data: Dict[str, Any]) -> Dict[str, Any]:
             'status_code': 500
         }
 
+def handle_cancel_appointment(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Handler para cancelar cita."""
+    try:
+        logger.info("❌ Procesando cancelación de cita")
+        service = get_appointment_service()
+        return service.handle_cancel_appointment(data)
+    except Exception as e:
+        logger.error(f"💥 Error en handler cancel_appointment: {e}")
+        return {
+            'status': 'error',
+            'message': 'Error interno cancelando cita',
+            'status_code': 500
+        }
+
 def handle_health_check(data: Dict[str, Any]) -> Dict[str, Any]:
     """Handler para health check del servicio."""
     try:

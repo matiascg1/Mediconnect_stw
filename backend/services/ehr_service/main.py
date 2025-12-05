@@ -1,9 +1,13 @@
+import sys
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from backend.config.settings import settings
-from backend.services.ehr_service.handlers import router as ehr_router
+from config.settings import settings
+from services.ehr_service.handlers import router as ehr_router
 import logging
+
+sys.path.insert(0, '/app')
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

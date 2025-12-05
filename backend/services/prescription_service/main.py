@@ -1,9 +1,13 @@
+import sys
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from backend.config.settings import settings
-from backend.services.prescription_service.handlers import router as prescription_router
+from config.settings import settings
+from services.prescription_service.handlers import router as prescription_router
 import logging
+
+sys.path.insert(0, '/app')
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -3,6 +3,7 @@ Utilidades de formateo para MediConnect.
 """
 
 import re
+from datetime import datetime
 
 def format_rut(rut: str) -> str:
     """
@@ -28,3 +29,15 @@ def format_phone(phone: str) -> str:
     
     digits = re.sub(r"\D", "", phone)
     return digits
+
+def format_datetime(dt: datetime) -> str:
+    """
+    Formatea un datetime a string ISO 8601.
+    """
+    if not dt:
+        return ""
+    
+    if isinstance(dt, datetime):
+        return dt.isoformat()
+    
+    return str(dt)

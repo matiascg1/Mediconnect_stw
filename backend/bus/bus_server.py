@@ -275,7 +275,8 @@ class BusServer:
     def _register_service(self, sock: socket.socket, message: Dict):
         """Registra un nuevo servicio."""
         try:
-            service_name = message.get('service_name')
+            data = message.get('data', {})
+            service_name = data.get('service_name')
             if not service_name:
                 self._send_error(sock, "Nombre de servicio requerido")
                 return
@@ -520,22 +521,17 @@ class BusServer:
             self._cleanup_socket(sock)
     
     def _send_to_socket(self, sock: socket.socket, message: Dict):
-        """Envía un mensaje a un socket."""
+        """Envía un mensaje JSON a un socket usando protocolo con header de tamaño."""
         try:
-            # Convertir a JSON
-            message_json = json.dumps(message, ensure_ascii=False)
-            message_bytes = message_json.encode('utf-8')
+            json_message = json.dumps(message, ensure_ascii=False)
+            message_bytes = json_message.encode('utf-8')
             
-            # Enviar tamaño (4 bytes, big-endian)
             size_bytes = len(message_bytes).to_bytes(4, 'big', signed=False)
-            sock.send(size_bytes + message_bytes)
+            sock.sendall(size_bytes + message_bytes)
             
-        except (BrokenPipeError, ConnectionError) as e:
-            logger.debug(f"🔌 Error enviando a socket (conexión cerrada): {e}")
-            self._cleanup_socket(sock)
+            logger.debug(f"📤 Mensaje enviado: {message.get('action', 'unknown')}")
         except Exception as e:
-            logger.error(f"💥 Error enviando a socket: {e}")
-            self._cleanup_socket(sock)
+            logger.error(f"💥 Error enviando mensaje a socket: {e}")
     
     def _send_success(self, sock: socket.socket, message: str):
         """Envía un mensaje de éxito."""

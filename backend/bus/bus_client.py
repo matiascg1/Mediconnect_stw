@@ -15,7 +15,7 @@ from enum import Enum
 
 # Configurar logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # DEBUG para ver TODO
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -186,6 +186,8 @@ class BusClient:
     def _register_service(self) -> bool:
         """Registra el servicio en el bus."""
         try:
+            logger.info(f"📝 {self.service_name} iniciando registro...")
+            
             register_msg = Message(
                 action='register',
                 sender=self.service_name,
@@ -193,23 +195,32 @@ class BusClient:
             )
             
             # Enviar mensaje de registro
+            logger.info(f"📤 {self.service_name} enviando mensaje de registro...")
             self._send_message(register_msg)
+            logger.info(f"📤 {self.service_name} mensaje de registro enviado")
             
             # Esperar respuesta
-            response = self._wait_for_response('registered', timeout=10)
+            logger.info(f"⏳ {self.service_name} esperando 'registered' (timeout: 15s)...")
+            response = self._wait_for_response('registered', timeout=15)
             
-            if response and response.get('action') == 'registered':
-                with self.lock:
-                    self.connection_state = ConnectionState.REGISTERED
-                
-                logger.info(f"✅ {self.service_name} registrado en el bus")
-                return True
+            if response:
+                logger.info(f"📥 {self.service_name} recibió respuesta: acción={response.get('action')}")
+                if response.get('action') == 'registered':
+                    with self.lock:
+                        self.connection_state = ConnectionState.REGISTERED
+                    
+                    logger.info(f"✅✅✅ {self.service_name} REGISTRADO EXITOSAMENTE en el bus")
+                    return True
+                else:
+                    logger.warning(f"⚠️  {self.service_name} recibió acción inesperada: {response}")
+            else:
+                logger.error(f"❌ {self.service_name} NO recibió NINGUNA respuesta")
             
             logger.error(f"❌ {self.service_name} no recibió confirmación de registro")
             return False
             
         except Exception as e:
-            logger.error(f"❌ {self.service_name} error registrando: {e}")
+            logger.error(f"❌ {self.service_name} error registrando: {e}", exc_info=True)
             return False
     
     def _start_threads(self):
@@ -356,6 +367,7 @@ class BusClient:
                 # Recibir mensaje
                 message_data = self._receive_raw_message(timeout=1)
                 if message_data:
+                    logger.info(f"📥 {self.service_name} RECIBIÓ: {message_data.get('action')}")
                     message = Message.from_dict(message_data)
                     
                     # Procesar mensajes especiales
@@ -364,18 +376,24 @@ class BusClient:
                         continue
                     elif message.action == 'service_connected':
                         logger.info(f"🔗 Servicio conectado: {message.data.get('service_name')}")
-                        # Don't continue, let them be enqueued
                     elif message.action == 'service_disconnected':
                         logger.info(f"🔌 Servicio desconectado: {message.data.get('service_name')}")
                     
+                    # **¡IMPORTANTE!** 'registered' debe procesarse normalmente
+                    # No hagas continue si es 'registered', déjalo que se encole
+                    
                     # Encolar para procesamiento - esta incluye 'registered'
                     self.incoming_queue.put(message)
+                    logger.info(f"📥 {self.service_name} mensaje encolado: {message.action}")
                     
                     with self.lock:
                         self.stats['messages_received'] += 1
-                
+                else:
+                    logger.debug(f"⏳ {self.service_name} no recibió datos (timeout)")
+                    
             except socket.timeout:
-                continue  # Timeout normal en receive
+                logger.debug(f"⏰ {self.service_name} timeout en receiver")
+                continue
             except (ConnectionError, OSError) as e:
                 logger.error(f"🔌 {self.service_name} error de conexión en receiver: {e}")
                 self._handle_connection_error("Error de conexión en receiver")
@@ -600,20 +618,39 @@ class BusClient:
     def _wait_for_response(self, expected_action: str, timeout: float = 10) -> Optional[Dict]:
         """Espera un mensaje con una acción específica."""
         start_time = time.time()
+        logger.info(f"⏳ {self.service_name} buscando '{expected_action}'...")
         
         while time.time() - start_time < timeout:
             # Verificar cola de mensajes entrantes
             try:
-                while not self.incoming_queue.empty():
-                    message = self.incoming_queue.get_nowait()
-                    if message.action == expected_action:
-                        return message.to_dict()
-            except Empty:
-                pass
+                if not self.incoming_queue.empty():
+                    logger.info(f"📦 {self.service_name} cola tiene {self.incoming_queue.qsize()} mensajes")
+                    
+                    # Revisar todos los mensajes en la cola
+                    messages_to_process = []
+                    while not self.incoming_queue.empty():
+                        try:
+                            message = self.incoming_queue.get_nowait()
+                            messages_to_process.append(message)
+                        except Empty:
+                            break
+                    
+                    for message in messages_to_process:
+                        logger.info(f"🔍 {self.service_name} revisando mensaje: {message.action}")
+                        if message.action == expected_action:
+                            logger.info(f"🎯 {self.service_name} ENCONTRÓ '{expected_action}'!")
+                            return message.to_dict()
+                        else:
+                            # Volver a encolar los mensajes que no son los que buscamos
+                            logger.info(f"📭 {self.service_name} descartando '{message.action}' (no es '{expected_action}')")
+                            self.incoming_queue.put(message)
+            except Exception as e:
+                logger.error(f"💥 {self.service_name} error revisando cola: {e}")
             
             time.sleep(0.1)
         
-        logger.warning(f"⏰ {self.service_name} timeout esperando {expected_action}")
+        logger.warning(f"⏰ {self.service_name} timeout esperando '{expected_action}' después de {timeout}s")
+        logger.warning(f"   Cola actual: {self.incoming_queue.qsize()} mensajes pendientes")
         return None
     
     def _wait_for_specific_response(self, request_id: str, timeout: float) -> Optional[Dict]:
@@ -717,6 +754,11 @@ class BusClient:
         with self.lock:
             return self.connection_state == ConnectionState.REGISTERED and self.socket is not None
     
+    @property
+    def connected(self) -> bool:
+        """Propiedad para verificar si está conectado (compatibilidad)."""
+        return self._is_connected()
+    
     def disconnect(self):
         """Desconecta del bus."""
         with self.lock:
@@ -772,7 +814,7 @@ class BusClient:
                 'connection_state': self.connection_state.value,
                 'callbacks_registered': len(self.callbacks),
                 'outgoing_queue_size': self.outgoing_queue.qsize(),
-                'incoming_queue_size': self.incoming_queue.size if hasattr(self.incoming_queue, 'size') else 'N/A',
+                'incoming_queue_size': self.incoming_queue.qsize(),
                 'reconnect_attempts': self.reconnect_attempts
             })
             return stats

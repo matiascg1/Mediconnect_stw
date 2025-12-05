@@ -11,7 +11,9 @@ from bus.bus_client import BusClient
 from services.appointment_service.handlers import (
     handle_create_appointment, handle_get_appointments_by_user,
     handle_get_appointment_by_id, handle_update_appointment_status,
-    handle_cancel_appointment, handle_health_check, set_bus_client
+    handle_cancel_appointment, handle_health_check, set_bus_client,
+    handle_get_doctor_availability, handle_get_appointment_stats,
+    handle_reschedule_appointment
 )
 
 

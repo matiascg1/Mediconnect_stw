@@ -87,7 +87,7 @@ def send_to_service(service: str, action: str, data: dict, timeout: int = 10) ->
     """Envía una solicitud a un servicio y espera respuesta"""
     global bus_client
     
-    if not bus_client or not bus_client.connected:
+    if not bus_client or not bus_client._is_connected():
         return {
             'status': 'error',
             'message': 'API Gateway no conectado al bus',
@@ -338,7 +338,7 @@ def update_appointment_status(appointment_id):
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check del sistema"""
-    bus_status = 'connected' if bus_client and bus_client.connected else 'disconnected'
+    bus_status = 'connected' if bus_client and bus_client._is_connected() else 'disconnected'
     
     return jsonify({
         'status': 'healthy',
