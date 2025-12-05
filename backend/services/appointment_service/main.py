@@ -1,22 +1,19 @@
-"""
-Punto de entrada del servicio de citas médicas.
-"""
 import sys
 import os
 import time
 import signal
-from utils.logger import get_logger
 
 # Agregar directorio raíz al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from utils.logger import get_logger
 from bus.bus_client import BusClient
-from .handlers import (
+from services.appointment_service.handlers import (
     handle_create_appointment, handle_get_appointments_by_user,
     handle_get_appointment_by_id, handle_update_appointment_status,
-    handle_get_doctor_availability, handle_get_appointment_stats,
-    handle_reschedule_appointment, handle_health_check, set_bus_client
+    handle_cancel_appointment, handle_health_check, set_bus_client
 )
+
 
 logger = get_logger(__name__)
 

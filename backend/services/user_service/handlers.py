@@ -166,3 +166,17 @@ def handle_health_check(data: Dict[str, Any]) -> Dict[str, Any]:
             'message': f'User service error: {str(e)}',
             'status_code': 500
         }
+
+def handle_create_user(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Handler para crear nuevo usuario."""
+    try:
+        logger.info("✏️  Procesando creación de nuevo usuario")
+        service = get_user_service()
+        return service.handle_create_user(data)
+    except Exception as e:
+        logger.error(f"💥 Error en handler create_user: {e}")
+        return {
+            'status': 'error',
+            'message': 'Error interno creando usuario',
+            'status_code': 500
+        }

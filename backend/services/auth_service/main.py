@@ -6,17 +6,18 @@ import os
 import time
 import signal
 import threading
-from utils.logger import get_logger
 
-# Agregar directorio raíz al path
+# Agregar directorio raíz al path (raíz = /app)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from utils.logger import get_logger
 from bus.bus_client import BusClient
-from .handlers import (
+from services.auth_service.handlers import (
     handle_register, handle_login, handle_verify_token, handle_refresh_token,
     handle_change_password, handle_logout, handle_reset_password_request,
     handle_reset_password, handle_get_user, handle_health_check, set_bus_client
 )
+
 
 logger = get_logger(__name__)
 

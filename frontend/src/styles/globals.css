@@ -1,66 +1,213 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+/* ==== TailwindCSS v3 ==== */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* ===========================================
+   ROOT VARIABLES
+   =========================================== */
+:root {
+  /* Medical Blue Palette */
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #60a5fa;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e40af;
+  --primary-900: #1e3a8a;
+
+  /* Medical Teal/Cyan Accent */
+  --secondary-50: #ecfeff;
+  --secondary-100: #cffafe;
+  --secondary-200: #a5f3fc;
+  --secondary-300: #67e8f9;
+  --secondary-400: #22d3ee;
+  --secondary-500: #06b6d4;
+  --secondary-600: #0891b2;
+  --secondary-700: #0e7490;
+  --secondary-800: #155e75;
+  --secondary-900: #164e63;
+
+  /* Additional Colors */
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --teal-600: #0d9488;
+  --cyan-600: #0891b2;
+  --danger-50: #fef2f2;
+  --danger-200: #fecaca;
+  --danger-500: #ef4444;
+  --danger-700: #b91c1c;
+  --danger-900: #7f1d1d;
+
+  /* Design System */
+  --background: #ffffff;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f1f1;
+  --secondary-foreground: #111111;
+  --muted: #f1f1f1;
+  --muted-foreground: #6b7280;
+  --accent: #f1f1f1;
+  --accent-foreground: #111111;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #818cf8;
+
+  --radius: 0.625rem;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #111111;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f1f1;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #818cf8;
+}
+
+/* ===========================================
+   DARK MODE
+   =========================================== */
+.dark {
+  --background: #111111;
+  --foreground: #ffffff;
+  --card: #111111;
+  --card-foreground: #ffffff;
+  --popover: #111111;
+  --popover-foreground: #ffffff;
+
+  --primary: #ffffff;
+  --primary-foreground: #111111;
+
+  --secondary: #333333;
+  --secondary-foreground: #ffffff;
+
+  --muted: #333333;
+  --muted-foreground: #999999;
+
+  --accent: #333333;
+  --accent-foreground: #ffffff;
+
+  --destructive: #7f1d1d;
+  --destructive-foreground: #ffffff;
+
+  --border: #333333;
+  --input: #333333;
+  --ring: #555555;
+
+  --sidebar: #222222;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #333333;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #333333;
+  --sidebar-ring: #555555;
+}
+
+/* ===========================================
+   BASE LAYER
+   =========================================== */
 @layer base {
-  :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
-  }
+* {
+  @apply border-border;
+  outline-color: var(--ring);
+  outline-width: 2px;
+  outline-style: solid;
+  outline-offset: 2px;
+}
 
   body {
-    @apply antialiased text-secondary-800 bg-secondary-50;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply tracking-tight font-semibold text-secondary-900;
+    @apply bg-background text-foreground;
   }
 }
 
+/* ===========================================
+   COMPONENTS
+   =========================================== */
 @layer components {
   .btn-primary {
-    @apply px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium 
-    hover:bg-primary-700 active:bg-primary-800 
-    focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 
-    transition-all duration-200 shadow-sm hover:shadow-md;
+    @apply px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold
+    hover:bg-primary-700 active:bg-primary-800
+    focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
+    transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5;
   }
-  
+
   .btn-secondary {
-    @apply px-5 py-2.5 bg-white text-secondary-700 border border-secondary-200 rounded-lg font-medium
+    @apply px-6 py-3 bg-white text-secondary-700 border-2 border-secondary-200 rounded-xl font-semibold
     hover:bg-secondary-50 hover:text-secondary-900 hover:border-secondary-300
-    focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 
-    transition-all duration-200 shadow-sm;
+    focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2
+    transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5;
   }
 
   .btn-danger {
-    @apply px-5 py-2.5 bg-white text-danger-700 border border-danger-200 rounded-lg font-medium
+    @apply px-6 py-3 bg-white text-danger-700 border-2 border-danger-200 rounded-xl font-semibold
     hover:bg-danger-50 hover:text-danger-900 hover:border-danger-300
-    focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-2 
-    transition-all duration-200 shadow-sm;
+    focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-2
+    transition-all duration-200 shadow-md hover:shadow-lg;
   }
-  
+
   .input-field {
-    @apply w-full px-4 py-2.5 bg-white border border-secondary-200 rounded-lg shadow-sm 
+    @apply w-full px-4 py-3 bg-white border-2 border-secondary-200 rounded-xl shadow-sm
     text-secondary-900 placeholder:text-secondary-400
-    focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 
+    focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500
     transition-all duration-200;
   }
 
   .card {
-    @apply bg-white rounded-xl shadow-card border border-secondary-100/50 overflow-hidden;
+    @apply bg-white rounded-2xl shadow-card border border-secondary-100 overflow-hidden
+    transition-all duration-300 hover:shadow-card-hover;
   }
-  
+
   .glass {
-    @apply bg-white/80 backdrop-blur-md border-b border-white/20;
+    @apply bg-white/90 backdrop-blur-lg border-b border-white/20 shadow-sm;
   }
 
   .container-custom {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
+
+  .gradient-primary {
+    @apply bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800;
+  }
+
+  .gradient-hero {
+    @apply bg-gradient-to-br from-primary-600 via-cyan-500 to-teal-500;
+  }
+
+  .gradient-success {
+    @apply bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600;
+  }
+
+  .shine-effect {
+    @apply relative overflow-hidden;
+  }
+
+  .shine-effect::before {
+    content: "";
+    @apply absolute top-0 -left-full w-full h-full;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+  }
+
+  .shine-effect:hover::before {
+    @apply left-full;
+  }
 }
 
-/* Custom scrollbar */
+/* ===========================================
+   SCROLLBAR
+   =========================================== */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -71,9 +218,14 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-secondary-300 rounded-full border-4 border-transparent bg-clip-content;
+  @apply bg-secondary-300 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-secondary-400;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
 }

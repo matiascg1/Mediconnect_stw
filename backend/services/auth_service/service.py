@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, Tuple
 import mysql.connector
 from database.connection import get_db_connection
 from utils.logger import get_logger
-from utils.security import generate_token, validate_token, hash_password, verify_password
+from utils.security import hash_password, verify_password
 
 logger = get_logger(__name__)
 

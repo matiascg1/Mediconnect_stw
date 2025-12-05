@@ -2,7 +2,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
-from backend.config.settings import settings
+from config.settings import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -10,8 +10,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password"""
     return pwd_context.verify(plain_password, hashed_password)
 
-def get_password_hash(password: str) -> str:
+def hash_password(password: str) -> str:
     """Hash a password"""
+    return pwd_context.hash(password)
+
+def get_password_hash(password: str) -> str:
+    """Hash a password (alias for hash_password)"""
     return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -34,3 +38,11 @@ def decode_access_token(token: str):
         return payload
     except JWTError:
         return None
+
+def generate_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Alias for create_access_token for backward compatibility"""
+    return create_access_token(data, expires_delta)
+
+def validate_token(token: str):
+    """Alias for decode_access_token for backward compatibility"""
+    return decode_access_token(token)

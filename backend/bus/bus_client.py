@@ -364,12 +364,11 @@ class BusClient:
                         continue
                     elif message.action == 'service_connected':
                         logger.info(f"🔗 Servicio conectado: {message.data.get('service_name')}")
-                        continue
+                        # Don't continue, let them be enqueued
                     elif message.action == 'service_disconnected':
                         logger.info(f"🔌 Servicio desconectado: {message.data.get('service_name')}")
-                        continue
                     
-                    # Encolar para procesamiento
+                    # Encolar para procesamiento - esta incluye 'registered'
                     self.incoming_queue.put(message)
                     
                     with self.lock:

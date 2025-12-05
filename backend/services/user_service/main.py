@@ -1,21 +1,17 @@
-"""
-Punto de entrada del servicio de gestión de usuarios.
-"""
 import sys
 import os
 import time
 import signal
-from utils.logger import get_logger
 
 # Agregar directorio raíz al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from utils.logger import get_logger
 from bus.bus_client import BusClient
-from .handlers import (
+from services.user_service.handlers import (
     handle_get_user_by_id, handle_get_all_users, handle_update_user,
     handle_delete_user, handle_activate_user, handle_get_doctors,
-    handle_get_user_stats, handle_get_user_activity, handle_search_users,
-    handle_health_check, set_bus_client
+    handle_create_user, handle_health_check, set_bus_client
 )
 
 logger = get_logger(__name__)

@@ -19,22 +19,22 @@ def init_connection_pool():
     global _connection_pool
     
     try:
-        # Configuración de la base de datos desde variables de entorno
+          # Configuración de la base de datos desde variables de entorno
         db_config = {
-            'host': os.getenv('MYSQL_HOST', 'localhost'),
-            'port': int(os.getenv('MYSQL_PORT', 3306)),
-            'user': os.getenv('MYSQL_USER', 'mediconnect'),
-            'password': os.getenv('MYSQL_PASSWORD', 'mediconnect123'),
-            'database': os.getenv('MYSQL_DATABASE', 'mediconnect_db'),
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', 3306)),
+            'user': os.getenv('DB_USER', 'mediconnect_user'),
+            'password': os.getenv('DB_PASSWORD', 'mediconnect123'),
+            'database': os.getenv('DB_NAME', 'mediconnect_db'),
             'charset': 'utf8mb4',
             'collation': 'utf8mb4_unicode_ci',
             'use_unicode': True,
             'autocommit': False,
             'pool_name': 'mediconnect_pool',
             'pool_size': 10,
-            'pool_reset_session': True
+            'pool_reset_session': True,
         }
-        
+
         _connection_pool = mysql.connector.pooling.MySQLConnectionPool(**db_config)
         
         logger.info(f"✅ Pool de conexiones MySQL inicializado: {db_config['host']}:{db_config['port']}/{db_config['database']}")
