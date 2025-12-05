@@ -1,0 +1,79 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  body {
+    @apply antialiased text-secondary-800 bg-secondary-50;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight font-semibold text-secondary-900;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium 
+    hover:bg-primary-700 active:bg-primary-800 
+    focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 
+    transition-all duration-200 shadow-sm hover:shadow-md;
+  }
+  
+  .btn-secondary {
+    @apply px-5 py-2.5 bg-white text-secondary-700 border border-secondary-200 rounded-lg font-medium
+    hover:bg-secondary-50 hover:text-secondary-900 hover:border-secondary-300
+    focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 
+    transition-all duration-200 shadow-sm;
+  }
+
+  .btn-danger {
+    @apply px-5 py-2.5 bg-white text-danger-700 border border-danger-200 rounded-lg font-medium
+    hover:bg-danger-50 hover:text-danger-900 hover:border-danger-300
+    focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-2 
+    transition-all duration-200 shadow-sm;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-2.5 bg-white border border-secondary-200 rounded-lg shadow-sm 
+    text-secondary-900 placeholder:text-secondary-400
+    focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 
+    transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-card border border-secondary-100/50 overflow-hidden;
+  }
+  
+  .glass {
+    @apply bg-white/80 backdrop-blur-md border-b border-white/20;
+  }
+
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-secondary-300 rounded-full border-4 border-transparent bg-clip-content;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-secondary-400;
+}
