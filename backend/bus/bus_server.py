@@ -1,6 +1,6 @@
 """
 Servidor central del bus de mensajería para MediConnect.
-Implementa comunicación TCP con protocolo JSON.
+VERSIÓN CORREGIDA - Envía respuesta inmediata al registro
 """
 import socket
 import select
@@ -10,10 +10,9 @@ import time
 import logging
 from typing import Dict, List, Optional, Set, Tuple
 from queue import Queue, Empty
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 
-# Configurar logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -65,8 +64,8 @@ class BusServer:
         
         # Configuración
         self.max_message_size = 10 * 1024 * 1024  # 10MB
-        self.heartbeat_interval = 30  # segundos
-        self.cleanup_interval = 60  # segundos
+        self.heartbeat_interval = 30
+        self.cleanup_interval = 60
         
     def start(self):
         """Inicia el servidor del bus."""
@@ -77,22 +76,17 @@ class BusServer:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.bind((self.host, self.port))
-            self.server_socket.listen(100)  # Hasta 100 conexiones pendientes
+            self.server_socket.listen(100)
             self.server_socket.setblocking(False)
             
-            # Agregar a inputs
             self.inputs.add(self.server_socket)
-            
-            # Iniciar estadísticas
             self.stats['start_time'] = datetime.now()
             self.running = True
             
-            # Iniciar hilos auxiliares
             self._start_auxiliary_threads()
             
             logger.info("✅ Bus Server iniciado correctamente")
             
-            # Loop principal
             self._main_loop()
             
         except Exception as e:
@@ -103,7 +97,6 @@ class BusServer:
     
     def _start_auxiliary_threads(self):
         """Inicia hilos auxiliares."""
-        # Hilo de heartbeat
         self.heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
             name="bus_heartbeat",
@@ -111,7 +104,6 @@ class BusServer:
         )
         self.heartbeat_thread.start()
         
-        # Hilo de limpieza
         self.cleanup_thread = threading.Thread(
             target=self._cleanup_loop,
             name="bus_cleanup",
@@ -127,26 +119,22 @@ class BusServer:
         
         while self.running:
             try:
-                # Usar select para manejar múltiples conexiones
                 readable, writable, exceptional = select.select(
                     list(self.inputs),
                     list(self.outputs),
                     list(self.inputs),
-                    1.0  # Timeout de 1 segundo
+                    1.0
                 )
                 
-                # Procesar sockets legibles
                 for sock in readable:
                     if sock is self.server_socket:
                         self._accept_new_connection()
                     else:
                         self._handle_client_message(sock)
                 
-                # Procesar sockets escribibles
                 for sock in writable:
                     self._send_pending_messages(sock)
                 
-                # Procesar sockets excepcionales
                 for sock in exceptional:
                     self._handle_exceptional_socket(sock)
                     
@@ -155,7 +143,7 @@ class BusServer:
                 break
             except Exception as e:
                 logger.error(f"💥 Error en loop principal: {e}")
-                time.sleep(1)  # Prevenir CPU spin en caso de error
+                time.sleep(1)
     
     def _accept_new_connection(self):
         """Acepta una nueva conexión."""
@@ -189,7 +177,6 @@ class BusServer:
             if message:
                 self._process_message(sock, message)
             else:
-                # Conexión cerrada por el cliente
                 self._cleanup_socket(sock)
                 
         except ConnectionError:
@@ -202,29 +189,25 @@ class BusServer:
     def _receive_message(self, sock: socket.socket) -> Optional[Dict]:
         """Recibe un mensaje completo del socket."""
         try:
-            # Recibir tamaño del mensaje (4 bytes, big-endian)
             header = sock.recv(4)
             if not header:
-                return None  # Conexión cerrada
+                return None
             
             message_size = int.from_bytes(header, 'big', signed=False)
             
-            # Validar tamaño del mensaje
             if message_size > self.max_message_size:
                 logger.warning(f"⚠️  Mensaje demasiado grande: {message_size} bytes")
                 return None
             
-            # Recibir mensaje completo
             received = 0
             chunks = []
             while received < message_size:
                 chunk = sock.recv(min(4096, message_size - received))
                 if not chunk:
-                    return None  # Conexión cerrada antes de recibir todo
+                    return None
                 chunks.append(chunk)
                 received += len(chunk)
             
-            # Decodificar JSON
             message_data = b''.join(chunks)
             message = json.loads(message_data.decode('utf-8'))
             
@@ -245,15 +228,12 @@ class BusServer:
         try:
             action = message.get('action')
             sender = message.get('sender', 'unknown')
-            timestamp = message.get('timestamp', datetime.now().isoformat())
             
             logger.debug(f"📨 Mensaje de '{sender}': {action}")
             
-            # Actualizar estadísticas
             with self.lock:
                 self.stats['messages_received'] += 1
             
-            # Procesar según acción
             if action == 'register':
                 self._register_service(sock, message)
             elif action == 'ping':
@@ -273,15 +253,18 @@ class BusServer:
             self._send_error(sock, f"Error interno: {str(e)}")
     
     def _register_service(self, sock: socket.socket, message: Dict):
-        """Registra un nuevo servicio."""
+        """
+        Registra un nuevo servicio.
+        🔥 CRÍTICO: Debe enviar la respuesta INMEDIATAMENTE
+        """
         try:
             data = message.get('data', {})
             service_name = data.get('service_name')
+            
             if not service_name:
                 self._send_error(sock, "Nombre de servicio requerido")
                 return
             
-            # Obtener dirección del cliente
             try:
                 client_address = sock.getpeername()
             except:
@@ -292,14 +275,10 @@ class BusServer:
                 if service_name in self.services:
                     old_sock = self.services[service_name].socket
                     if old_sock != sock:
-                        # Servicio existente con nuevo socket (reconexión)
                         logger.info(f"🔄 Re-conexión del servicio: {service_name}")
                         self._cleanup_socket(old_sock)
                     else:
-                        # Mismo socket, actualizar timestamp
                         self.services[service_name].last_seen = datetime.now()
-                        self._send_success(sock, f"Servicio {service_name} ya registrado")
-                        return
                 
                 # Registrar nuevo servicio
                 service_info = ServiceInfo(
@@ -314,28 +293,53 @@ class BusServer:
                 self.socket_to_service[sock] = service_name
                 
                 logger.info(f"✅ Servicio registrado: {service_name} desde {client_address}")
-                
-                # Enviar confirmación
-                response = {
-                    'action': 'registered',
-                    'service_name': service_name,
-                    'message': f'Servicio {service_name} registrado exitosamente',
-                    'timestamp': datetime.now().isoformat(),
-                    'registered_services': list(self.services.keys())
-                }
-                self._send_to_socket(sock, response)
-                
-                # Notificar a otros servicios sobre el nuevo servicio
-                notification = {
-                    'action': 'service_connected',
-                    'service_name': service_name,
-                    'timestamp': datetime.now().isoformat()
-                }
-                self._broadcast(notification, exclude_sockets=[sock])
+            
+            # 🔥 CRÍTICO: Enviar respuesta INMEDIATAMENTE
+            response = {
+                'action': 'registered',
+                'service_name': service_name,
+                'message': f'Servicio {service_name} registrado exitosamente',
+                'timestamp': datetime.now().isoformat(),
+                'registered_services': list(self.services.keys())
+            }
+            
+            # Enviar directamente sin encolar
+            self._send_to_socket_immediate(sock, response)
+            
+            logger.info(f"📤 RESPUESTA 'registered' ENVIADA a {service_name}")
+            
+            # Notificar a otros servicios
+            notification = {
+                'action': 'service_connected',
+                'service_name': service_name,
+                'timestamp': datetime.now().isoformat()
+            }
+            self._broadcast(notification, exclude_sockets=[sock])
+            
+        except Exception as e:
+            logger.error(f"💥 Error registrando servicio: {e}", exc_info=True)
+            self._send_error(sock, f"Error registrando servicio: {str(e)}")
+    
+    def _send_to_socket_immediate(self, sock: socket.socket, message: Dict):
+        """
+        Envía un mensaje INMEDIATAMENTE sin usar cola.
+        🔥 Método crítico para respuestas de registro.
+        """
+        try:
+            json_message = json.dumps(message, ensure_ascii=False)
+            message_bytes = json_message.encode('utf-8')
+            
+            size_bytes = len(message_bytes).to_bytes(4, 'big', signed=False)
+            sock.sendall(size_bytes + message_bytes)
+            
+            logger.info(f"📤 Mensaje INMEDIATO enviado: {message.get('action', 'unknown')}")
+            
+            with self.lock:
+                self.stats['messages_sent'] += 1
                 
         except Exception as e:
-            logger.error(f"💥 Error registrando servicio: {e}")
-            self._send_error(sock, f"Error registrando servicio: {str(e)}")
+            logger.error(f"💥 Error enviando mensaje inmediato: {e}", exc_info=True)
+            raise
     
     def _route_message(self, sock: socket.socket, message: Dict):
         """Enruta un mensaje a su destino."""
@@ -348,20 +352,16 @@ class BusServer:
                     self._send_error(sock, f"Servicio destino '{destination}' no encontrado")
                     return
                 
-                # Obtener información del servicio destino
                 dest_service = self.services[destination]
                 dest_sock = dest_service.socket
                 
-                # Actualizar timestamp del servicio destino
                 dest_service.last_seen = datetime.now()
                 dest_service.message_count += 1
                 
-                # Actualizar estadísticas del sender si está registrado
                 if sender in self.services:
                     self.services[sender].message_count += 1
                     self.services[sender].last_seen = datetime.now()
                 
-                # Agregar información de routing al mensaje
                 routed_message = message.copy()
                 routed_message['_routed'] = {
                     'sender_socket': str(sock.getpeername() if sock else 'unknown'),
@@ -369,12 +369,10 @@ class BusServer:
                     'hop_count': message.get('_routed', {}).get('hop_count', 0) + 1
                 }
                 
-                # Encolar mensaje para envío
                 self.message_queues[dest_sock].put(routed_message)
                 if dest_sock not in self.outputs:
                     self.outputs.add(dest_sock)
                 
-                # Enviar confirmación al remitente
                 confirmation = {
                     'action': 'routed',
                     'destination': destination,
@@ -402,7 +400,6 @@ class BusServer:
             }
             self._send_to_socket(sock, response)
             
-            # Actualizar last_seen si es un servicio registrado
             with self.lock:
                 service_name = self.socket_to_service.get(sock)
                 if service_name and service_name in self.services:
@@ -442,7 +439,6 @@ class BusServer:
             sender = message.get('sender', 'unknown')
             data = message.get('data', {})
             
-            # Crear mensaje de broadcast
             broadcast_msg = {
                 'action': 'broadcast',
                 'sender': sender,
@@ -451,11 +447,9 @@ class BusServer:
                 'original_timestamp': message.get('timestamp')
             }
             
-            # Broadcast a todos excepto al remitente
             exclude_sockets = [sock]
             recipients = self._broadcast(broadcast_msg, exclude_sockets)
             
-            # Enviar confirmación al remitente
             confirmation = {
                 'action': 'broadcast_sent',
                 'timestamp': datetime.now().isoformat(),
@@ -495,7 +489,7 @@ class BusServer:
                 return
             
             sent_count = 0
-            max_messages_per_cycle = 100  # Limitar mensajes por ciclo
+            max_messages_per_cycle = 100
             
             while sent_count < max_messages_per_cycle and not queue.empty():
                 try:
@@ -512,7 +506,6 @@ class BusServer:
                     logger.error(f"💥 Error enviando mensaje pendiente: {e}")
                     break
             
-            # Si la cola está vacía, remover de outputs
             if queue.empty() and sock in self.outputs:
                 self.outputs.remove(sock)
                 
@@ -521,7 +514,7 @@ class BusServer:
             self._cleanup_socket(sock)
     
     def _send_to_socket(self, sock: socket.socket, message: Dict):
-        """Envía un mensaje JSON a un socket usando protocolo con header de tamaño."""
+        """Envía un mensaje JSON a un socket (encolado)."""
         try:
             json_message = json.dumps(message, ensure_ascii=False)
             message_bytes = json_message.encode('utf-8')
@@ -532,15 +525,7 @@ class BusServer:
             logger.debug(f"📤 Mensaje enviado: {message.get('action', 'unknown')}")
         except Exception as e:
             logger.error(f"💥 Error enviando mensaje a socket: {e}")
-    
-    def _send_success(self, sock: socket.socket, message: str):
-        """Envía un mensaje de éxito."""
-        response = {
-            'action': 'success',
-            'message': message,
-            'timestamp': datetime.now().isoformat()
-        }
-        self._send_to_socket(sock, response)
+            raise
     
     def _send_error(self, sock: socket.socket, error_message: str):
         """Envía un mensaje de error."""
@@ -549,7 +534,10 @@ class BusServer:
             'error': error_message,
             'timestamp': datetime.now().isoformat()
         }
-        self._send_to_socket(sock, response)
+        try:
+            self._send_to_socket(sock, response)
+        except:
+            pass
         
         with self.lock:
             self.stats['errors'] += 1
@@ -562,13 +550,11 @@ class BusServer:
     def _cleanup_socket(self, sock: socket.socket):
         """Limpia los recursos de un socket."""
         with self.lock:
-            # Remover de registros
             service_name = self.socket_to_service.pop(sock, None)
             if service_name and service_name in self.services:
                 service_info = self.services.pop(service_name)
                 logger.info(f"🔌 Servicio desconectado: {service_name} ({service_info.address})")
                 
-                # Notificar a otros servicios
                 notification = {
                     'action': 'service_disconnected',
                     'service_name': service_name,
@@ -577,16 +563,13 @@ class BusServer:
                 }
                 self._broadcast(notification, exclude_sockets=[sock])
             
-            # Remover de listas de selección
             if sock in self.inputs:
                 self.inputs.remove(sock)
             if sock in self.outputs:
                 self.outputs.remove(sock)
             
-            # Limpiar cola de mensajes
             self.message_queues.pop(sock, None)
             
-            # Cerrar socket
             try:
                 sock.close()
             except:
@@ -600,24 +583,21 @@ class BusServer:
             try:
                 time.sleep(self.heartbeat_interval)
                 
-                # Verificar servicios inactivos
                 now = datetime.now()
                 inactive_services = []
                 
                 with self.lock:
                     for service_name, service_info in self.services.items():
                         time_since_last_seen = (now - service_info.last_seen).total_seconds()
-                        if time_since_last_seen > self.heartbeat_interval * 3:  # 3 veces el intervalo
+                        if time_since_last_seen > self.heartbeat_interval * 3:
                             inactive_services.append(service_name)
                 
-                # Limpiar servicios inactivos
                 for service_name in inactive_services:
                     logger.warning(f"⚠️  Servicio inactivo detectado: {service_name}")
                     service_info = self.services.get(service_name)
                     if service_info:
                         self._cleanup_socket(service_info.socket)
                 
-                # Enviar heartbeat a servicios activos
                 heartbeat_msg = {
                     'action': 'heartbeat',
                     'timestamp': now.isoformat(),
@@ -644,19 +624,16 @@ class BusServer:
             try:
                 time.sleep(self.cleanup_interval)
                 
-                # Limpiar colas muy grandes
                 with self.lock:
                     for sock, queue in list(self.message_queues.items()):
                         if queue.qsize() > 1000:
                             logger.warning(f"⚠️  Cola muy grande: {queue.qsize()} mensajes")
-                            # Limpiar algunos mensajes antiguos
                             try:
-                                for _ in range(500):  # Limpiar 500 mensajes
+                                for _ in range(500):
                                     queue.get_nowait()
                             except Empty:
                                 pass
                 
-                # Log de estadísticas periódicas
                 stats = self._get_server_stats()
                 logger.info(f"📊 Estadísticas del servidor: {stats}")
                 
@@ -689,7 +666,6 @@ class BusServer:
         self.running = False
         
         with self.lock:
-            # Cerrar todos los sockets de clientes
             for sock in list(self.inputs):
                 if sock != self.server_socket:
                     try:
@@ -697,14 +673,12 @@ class BusServer:
                     except:
                         pass
             
-            # Cerrar socket del servidor
             if self.server_socket:
                 try:
                     self.server_socket.close()
                 except:
                     pass
             
-            # Limpiar todas las estructuras
             self.inputs.clear()
             self.outputs.clear()
             self.services.clear()
