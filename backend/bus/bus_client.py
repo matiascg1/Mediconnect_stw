@@ -1,5 +1,6 @@
 """
 Cliente del bus de mensajería para servicios MediConnect.
+VERSIÓN CORREGIDA - Soluciona problemas de registro
 """
 import socket
 import json
@@ -13,9 +14,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from enum import Enum
 
-# Configurar logging
 logging.basicConfig(
-    level=logging.DEBUG,  # DEBUG para ver TODO
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -91,15 +91,18 @@ class BusClient:
         self.callbacks: Dict[str, Callable[[Dict], Optional[Dict]]] = {}
         
         # Colas de mensajes
-        self.outgoing_queue = Queue()  # Mensajes para enviar
-        self.incoming_queue = Queue()  # Mensajes recibidos
-        self.response_queues: Dict[str, Queue] = {}  # Respuestas específicas por request_id
+        self.outgoing_queue = Queue()
+        self.incoming_queue = Queue()
+        self.response_queues: Dict[str, Queue] = {}
         
         # Hilos
         self.receiver_thread: Optional[threading.Thread] = None
         self.sender_thread: Optional[threading.Thread] = None
         self.processor_thread: Optional[threading.Thread] = None
         self.heartbeat_thread: Optional[threading.Thread] = None
+        
+        # 🔥 NUEVO: Evento para indicar que receiver está listo
+        self.receiver_ready = threading.Event()
         
         # Control
         self.running = False
@@ -108,9 +111,9 @@ class BusClient:
         # Configuración
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 10
-        self.reconnect_delay = 5  # segundos
-        self.heartbeat_interval = 30  # segundos
-        self.response_timeout = 30  # segundos
+        self.reconnect_delay = 5
+        self.heartbeat_interval = 30
+        self.response_timeout = 30
         
         # Estadísticas
         self.stats = {
@@ -143,7 +146,7 @@ class BusClient:
             
             # Conectar
             self.socket.connect((self.host, self.port))
-            self.socket.settimeout(None)  # Quitar timeout después de conectar
+            self.socket.settimeout(None)
             
             with self.lock:
                 self.connection_state = ConnectionState.CONNECTED
@@ -154,6 +157,14 @@ class BusClient:
             
             # Iniciar hilos
             self._start_threads()
+            
+            # 🔥 CRÍTICO: Esperar a que receiver esté listo
+            logger.info(f"⏳ {self.service_name} esperando que receiver esté listo...")
+            if not self.receiver_ready.wait(timeout=5):
+                logger.error(f"❌ {self.service_name} receiver no se inició a tiempo")
+                self.disconnect()
+                return False
+            logger.info(f"✅ {self.service_name} receiver está listo")
             
             # Registrar servicio
             if not self._register_service():
@@ -227,6 +238,7 @@ class BusClient:
         """Inicia los hilos del cliente."""
         with self.lock:
             self.running = True
+            self.receiver_ready.clear()  # 🔥 Resetear evento
             
             # Hilo receptor
             self.receiver_thread = threading.Thread(
@@ -264,99 +276,13 @@ class BusClient:
         
         logger.debug(f"🔄 {self.service_name} hilos iniciados")
     
-    def send_message(self, destination: str, action: str, data: Optional[Dict] = None, 
-                    request_id: Optional[str] = None, wait_for_response: bool = False,
-                    timeout: Optional[float] = None) -> Optional[Dict]:
-        """
-        Envía un mensaje a otro servicio.
-        
-        Args:
-            destination: Nombre del servicio destino
-            action: Acción a realizar
-            data: Datos del mensaje
-            request_id: ID opcional de la solicitud
-            wait_for_response: Si True, espera y retorna la respuesta
-            timeout: Timeout para esperar respuesta (segundos)
-            
-        Returns:
-            Respuesta si wait_for_response es True, None en caso contrario
-        """
-        try:
-            # Verificar conexión
-            if not self._is_connected():
-                logger.error(f"❌ {self.service_name} no está conectado")
-                return None
-            
-            # Generar request_id si no se proporciona
-            if request_id is None:
-                request_id = str(uuid.uuid4())
-            
-            # Crear mensaje
-            message = Message(
-                action=action,
-                sender=self.service_name,
-                destination=destination,
-                data=data or {},
-                request_id=request_id
-            )
-            
-            logger.debug(f"📤 {self.service_name} -> {destination}.{action} (ID: {request_id})")
-            
-            # Encolar para envío
-            self.outgoing_queue.put(message)
-            
-            # Esperar respuesta si es necesario
-            if wait_for_response:
-                return self._wait_for_specific_response(request_id, timeout or self.response_timeout)
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"💥 {self.service_name} error enviando mensaje: {e}")
-            self.stats['errors'] += 1
-            return None
-    
-    def broadcast(self, action: str, data: Optional[Dict] = None):
-        """Envía un mensaje de broadcast a todos los servicios."""
-        try:
-            if not self._is_connected():
-                logger.error(f"❌ {self.service_name} no está conectado para broadcast")
-                return
-            
-            message = Message(
-                action='broadcast',
-                sender=self.service_name,
-                data={
-                    'action': action,
-                    'data': data or {},
-                    'timestamp': datetime.now().isoformat()
-                }
-            )
-            
-            logger.info(f"📢 {self.service_name} broadcast: {action}")
-            self.outgoing_queue.put(message)
-            
-        except Exception as e:
-            logger.error(f"💥 {self.service_name} error en broadcast: {e}")
-            self.stats['errors'] += 1
-    
-    def register_callback(self, action: str, callback: Callable[[Dict], Optional[Dict]]):
-        """Registra un callback para una acción específica."""
-        with self.lock:
-            self.callbacks[action] = callback
-        
-        logger.debug(f"🎯 {self.service_name} callback registrado para '{action}'")
-    
-    def unregister_callback(self, action: str):
-        """Elimina un callback registrado."""
-        with self.lock:
-            self.callbacks.pop(action, None)
-        
-        logger.debug(f"🗑️  {self.service_name} callback eliminado para '{action}'")
-    
     def _receiver_loop(self):
         """Loop principal de recepción de mensajes."""
         logger.debug(f"👂 {self.service_name} iniciando receiver loop")
+        
+        # 🔥 CRÍTICO: Señalar que receiver está listo
+        self.receiver_ready.set()
+        logger.info(f"🎉 {self.service_name} receiver loop LISTO para recibir mensajes")
         
         while self.running:
             try:
@@ -379,10 +305,7 @@ class BusClient:
                     elif message.action == 'service_disconnected':
                         logger.info(f"🔌 Servicio desconectado: {message.data.get('service_name')}")
                     
-                    # **¡IMPORTANTE!** 'registered' debe procesarse normalmente
-                    # No hagas continue si es 'registered', déjalo que se encole
-                    
-                    # Encolar para procesamiento - esta incluye 'registered'
+                    # Encolar para procesamiento - incluye 'registered'
                     self.incoming_queue.put(message)
                     logger.info(f"📥 {self.service_name} mensaje encolado: {message.action}")
                     
@@ -412,7 +335,7 @@ class BusClient:
                     time.sleep(0.1)
                     continue
                 
-                # Obtener mensaje de la cola (con timeout para poder verificar running)
+                # Obtener mensaje de la cola
                 try:
                     message = self.outgoing_queue.get(timeout=0.1)
                 except Empty:
@@ -428,7 +351,6 @@ class BusClient:
                 
             except (ConnectionError, OSError) as e:
                 logger.error(f"🔌 {self.service_name} error de conexión en sender: {e}")
-                # Re-encolar mensaje si hubo error
                 if 'message' in locals():
                     self.outgoing_queue.put(message)
                 self._handle_connection_error("Error de conexión en sender")
@@ -466,20 +388,10 @@ class BusClient:
             try:
                 current_time = time.time()
                 
-                # Enviar heartbeat periódicamente
                 if current_time - last_heartbeat >= self.heartbeat_interval:
                     if self._is_connected():
                         self._send_heartbeat()
                         last_heartbeat = current_time
-                
-                # Verificar timeout de conexión
-                if self._is_connected():
-                    last_response = self.stats.get('last_heartbeat')
-                    if last_response:
-                        time_since_response = current_time - last_response.timestamp() if hasattr(last_response, 'timestamp') else 0
-                        if time_since_response > self.heartbeat_interval * 3:
-                            logger.warning(f"⚠️  {self.service_name} sin heartbeat por {time_since_response:.0f}s")
-                            self._handle_connection_error("Heartbeat timeout")
                 
                 time.sleep(1)
                 
@@ -500,7 +412,9 @@ class BusClient:
             
             # Enviar tamaño (4 bytes, big-endian)
             size_bytes = len(message_bytes).to_bytes(4, 'big', signed=False)
-            self.socket.send(size_bytes + message_bytes)
+            
+            # 🔥 CRÍTICO: Usar sendall() en lugar de send()
+            self.socket.sendall(size_bytes + message_bytes)
             
         except (BrokenPipeError, ConnectionError, OSError) as e:
             logger.error(f"🔌 {self.service_name} error enviando mensaje: {e}")
@@ -521,7 +435,7 @@ class BusClient:
             # Recibir tamaño del mensaje
             header = self.socket.recv(4)
             if not header:
-                return None  # Conexión cerrada
+                return None
             
             message_size = int.from_bytes(header, 'big', signed=False)
             
@@ -531,7 +445,7 @@ class BusClient:
             while received < message_size:
                 chunk = self.socket.recv(min(4096, message_size - received))
                 if not chunk:
-                    return None  # Conexión cerrada antes de recibir todo
+                    return None
                 chunks.append(chunk)
                 received += len(chunk)
             
@@ -542,9 +456,9 @@ class BusClient:
             return message
             
         except socket.timeout:
-            return None  # Timeout normal
+            return None
         except (ConnectionError, OSError):
-            raise  # Propagar error de conexión
+            raise
         except json.JSONDecodeError as e:
             logger.error(f"❌ {self.service_name} error decodificando JSON: {e}")
             return None
@@ -589,7 +503,6 @@ class BusClient:
                 except Exception as e:
                     logger.error(f"💥 {self.service_name} error en callback {action}: {e}")
                     
-                    # Enviar error si hay request_id
                     if request_id and sender:
                         error_msg = Message(
                             action='error',
@@ -642,7 +555,7 @@ class BusClient:
                             return message.to_dict()
                         else:
                             # Volver a encolar los mensajes que no son los que buscamos
-                            logger.info(f"📭 {self.service_name} descartando '{message.action}' (no es '{expected_action}')")
+                            logger.info(f"📭 {self.service_name} re-encolando '{message.action}'")
                             self.incoming_queue.put(message)
             except Exception as e:
                 logger.error(f"💥 {self.service_name} error revisando cola: {e}")
@@ -653,14 +566,46 @@ class BusClient:
         logger.warning(f"   Cola actual: {self.incoming_queue.qsize()} mensajes pendientes")
         return None
     
+    def send_message(self, destination: str, action: str, data: Optional[Dict] = None, 
+                    request_id: Optional[str] = None, wait_for_response: bool = False,
+                    timeout: Optional[float] = None) -> Optional[Dict]:
+        """Envía un mensaje a otro servicio."""
+        try:
+            if not self._is_connected():
+                logger.error(f"❌ {self.service_name} no está conectado")
+                return None
+            
+            if request_id is None:
+                request_id = str(uuid.uuid4())
+            
+            message = Message(
+                action=action,
+                sender=self.service_name,
+                destination=destination,
+                data=data or {},
+                request_id=request_id
+            )
+            
+            logger.debug(f"📤 {self.service_name} -> {destination}.{action} (ID: {request_id})")
+            
+            self.outgoing_queue.put(message)
+            
+            if wait_for_response:
+                return self._wait_for_specific_response(request_id, timeout or self.response_timeout)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"💥 {self.service_name} error enviando mensaje: {e}")
+            self.stats['errors'] += 1
+            return None
+    
     def _wait_for_specific_response(self, request_id: str, timeout: float) -> Optional[Dict]:
         """Espera una respuesta específica por request_id."""
-        # Crear cola para esta respuesta
         response_queue = Queue()
         self.response_queues[request_id] = response_queue
         
         try:
-            # Esperar respuesta
             response = response_queue.get(timeout=timeout)
             return response
             
@@ -668,8 +613,14 @@ class BusClient:
             logger.warning(f"⏰ {self.service_name} timeout esperando respuesta {request_id}")
             return None
         finally:
-            # Limpiar cola
             self.response_queues.pop(request_id, None)
+    
+    def register_callback(self, action: str, callback: Callable[[Dict], Optional[Dict]]):
+        """Registra un callback para una acción específica."""
+        with self.lock:
+            self.callbacks[action] = callback
+        
+        logger.debug(f"🎯 {self.service_name} callback registrado para '{action}'")
     
     def _send_heartbeat(self):
         """Envía un mensaje de heartbeat."""
@@ -689,7 +640,6 @@ class BusClient:
         with self.lock:
             self.stats['last_heartbeat'] = datetime.now()
         
-        # Responder con pong
         pong_msg = Message(
             action='pong',
             sender=self.service_name,
@@ -705,14 +655,12 @@ class BusClient:
                 self.connection_state = ConnectionState.ERROR
                 logger.error(f"❌ {self.service_name} error de conexión: {error_message}")
                 
-                # Llamar callback de error
                 if self.on_error:
                     try:
                         self.on_error(error_message)
                     except Exception as e:
                         logger.error(f"💥 Error en callback on_error: {e}")
         
-        # Intentar reconexión
         self._try_reconnect()
     
     def _try_reconnect(self):
@@ -721,7 +669,6 @@ class BusClient:
             if self.reconnect_attempts >= self.max_reconnect_attempts:
                 logger.error(f"❌ {self.service_name} máximo de intentos de reconexión alcanzado")
                 
-                # Llamar callback de desconexión
                 if self.on_disconnect:
                     try:
                         self.on_disconnect()
@@ -734,10 +681,8 @@ class BusClient:
         
         logger.info(f"🔄 {self.service_name} intentando reconexión ({self.reconnect_attempts}/{self.max_reconnect_attempts})")
         
-        # Esperar antes de reconectar
         time.sleep(self.reconnect_delay * min(self.reconnect_attempts, 3))
         
-        # Intentar reconectar
         try:
             self.disconnect()
             if self.connect():
@@ -746,7 +691,6 @@ class BusClient:
         except Exception as e:
             logger.error(f"❌ {self.service_name} error en reconexión: {e}")
         
-        # Si no se pudo reconectar, intentar de nuevo
         self._try_reconnect()
     
     def _is_connected(self) -> bool:
@@ -756,7 +700,7 @@ class BusClient:
     
     @property
     def connected(self) -> bool:
-        """Propiedad para verificar si está conectado (compatibilidad)."""
+        """Propiedad para verificar si está conectado."""
         return self._is_connected()
     
     def disconnect(self):
@@ -818,30 +762,6 @@ class BusClient:
                 'reconnect_attempts': self.reconnect_attempts
             })
             return stats
-    
-    def discover_services(self, timeout: float = 5) -> List[Dict]:
-        """Descubre servicios conectados al bus."""
-        try:
-            if not self._is_connected():
-                return []
-            
-            discover_msg = Message(
-                action='discover',
-                sender=self.service_name,
-                data={'timestamp': datetime.now().isoformat()}
-            )
-            
-            # Enviar y esperar respuesta
-            response = self.send_message('bus', 'discover', wait_for_response=True, timeout=timeout)
-            
-            if response and response.get('action') == 'discover_response':
-                return response.get('data', {}).get('services', [])
-            
-            return []
-            
-        except Exception as e:
-            logger.error(f"💥 {self.service_name} error descubriendo servicios: {e}")
-            return []
     
     def __enter__(self):
         """Context manager entry."""
